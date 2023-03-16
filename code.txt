@@ -1,0 +1,128 @@
+
+1. make sure hive container is up and running
+2. open powershell 
+3. run below command
+docker cp C:\Users\Nandha\OneDrive\Desktop\datasets\AgentLogingReport.csv hivedockersetup-namenode-1:/
+docker cp C:\Users\Nandha\OneDrive\Desktop\datasets\AgentPerformance.csv hivedockersetup-namenode-1:/
+
+4. open new powershell and run below command2
+docker exec -it  hivedockersetup-namenode-1 bash
+5. if you will try with ls -ltr /
+you can find the file, which you had copied to / on namenode
+6. you can create a dir in hadoop, with below command
+hadoop fs -mkdir /folder_name
+7. now you can put the file from namenode to hadoop
+hadoop fs -put AgentLogingReport.csv /tmp
+hadoop fs -put AgentPerformance.csv /tmp
+
+
+C:\Users\Nandha\OneDrive\Desktop\datasets\AgentLogingReport.csv
+
+create table Agent_login (
+SL_No int,
+Agent string,
+Login_Date string,
+Login_Time string,
+Logout_Time string,
+Duration string
+)
+row format delimited
+fields terminated by ','
+tblproperties("skip.header.line.count"="1");
+
+/tmp/AgentLogingReport.csv
+
+Load data from hdfs location
+load data inpath '/tmp/AgentLogingReport.csv' into table agent_login ;
+load data inpath '/tmp/AgentPerformance.csv' into table agent_perfomance ;
+
+set hive.cli.print.header =true;
+
+create table Agent_perfomance (
+SL_No int,
+Login_date string,
+AgentName string,
+TotalChats int,
+Average_Response_Time string,
+Average_Resolution_Time string,
+Average_Rating float,
+Total_Feedback int
+)
+row format delimited
+fields terminated by ','
+tblproperties("skip.header.line.count"="1");
+
+List of all agents' names. 
+
+select agent from agent_login 
+union 
+select agentname from agent_perfomance ;
+
+Find out agent average rating.
+
+select agentname as Agentname ,avg(Average_Rating) as Average_Rating from agent_perfomance 
+where average_rating > 0
+group by agentname;
+
+Total working days for each agents 
+
+select agent_name , count(*) from (select agent as agent_name  , login_date as login from agent_login 
+group by agent,login_date)tmp 
+group by agent_name ;
+
+6. Total query that each agent have taken 
+
+select agentname , sum(totalchats) from agent_perfomance
+group by agentname;
+
+7. Total Feedback that each agent have received 
+
+select agentname , sum(total_feedback) as total_feedback from agent_perfomance
+group by agentname;
+
+8.Agent name who have average rating between 3.5 to 4 
+
+select agentname as Agentname ,avg(Average_Rating) as Average_Rating from agent_perfomance 
+where average_rating between 3.5 and 4
+group by agentname;
+
+9. Agent name who have rating less than 3.5 
+
+select agentname as Agentname ,avg(Average_Rating) as Average_Rating from agent_perfomance 
+where average_rating < 3.5 
+group by agentname;
+
+10. Agent name who have rating more than 4.5 
+
+select agentname as Agentname ,avg(Average_Rating) as Average_Rating from agent_perfomance 
+where average_rating > 4.5
+group by agentname;
+
+11. How many feedback agents have received more than 4.5 average
+
+select agentname , sum(total_feedback) as total_feedback from agent_perfomance
+where average_rating > 4.5
+group by agentname;
+
+
+12. average weekly response time for each agent 
+ans -
+with cte as (
+select *, unix_timestamp(Average_Response_Time, 'H:mm:ss') as w,
+from_unixtime(unix_timestamp(login_date, 'M/dd/yyyy'), 'yyyy-MM-dd') as u,
+weekofyear(from_unixtime(unix_timestamp(login_date, 'M/dd/yyyy'), 'yyyy-MM-dd')) as y
+from agent_perfomance),
+cte1 as(
+select agentname,
+from_unixtime(unix_timestamp(cast(cast(avg(w) over(partition by agentname,y) as int)as string), 'ss'), 'H:mm:ss') as avg_res_time_per_agent,
+y as week_of_year
+from cte)
+select agentname,
+avg_res_time_per_agent,
+week_of_year
+from cte1
+group by agentname, avg_res_time_per_agent,week_of_year
+order by agentname,week_of_year;
+
+select weekofyear(from_unixtime(unix_timestamp('7/30/2022','M/dd/yyyy'),'yyyy-MM-dd')) from agent_perfomance limit 5;
+select agentname, date_format(from_unixtime(unix_timestamp('7/30/2022','M/dd/yyyy'),'yyyy-MM-dd'),'u') as dayofweek from agent_perfomance ;
